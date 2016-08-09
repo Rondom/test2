@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Octopus Release Information</title>
+    <style type="text/css">
+
+    </style>
+</head>
+<body>
+    <div data-bind="visible: version() != ''">
+        <h1>
+            Release <span data-bind="text: version"></span>
+            <span data-bind="visible: environment">(<span data-bind="text: environment"></span>)</span>
+        </h1>
+
+        <div>
+            <div data-bind="html: notes"></div>
+        </div>
+    </div>
+    <div data-bind="visible: version() == ''">
+        Could not find specified release.
+    </div>
+
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+    <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/knockout/2.0.0/knockout-min.js"></script>
+    <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/pagedown/1.0/Markdown.Converter.js"></script>
+    <script type="text/javascript">
+        function viewModel() {
+            var self = this;
+            self.version = ko.observable('');
+            self.url = ko.observable('');
+            self.notes = ko.observable('');
+            self.environment = ko.observable('');
+
+            // retrieve the specified release
+            $.getJSON('/api/projects/@Request["project"]/releases/@Request["release"]', function (release) {
+                self.version(release.Version);
+                self.url(release.Links.Web);
+
+                // convert the markdown format in the release notes to html
+                var converter = new Markdown.Converter();
+                self.notes(converter.makeHtml(release.ReleaseNotes));
+
+                // get the environment for the latest deployment for this release
+                $.getJSON(release.Links.Deployments, function (deployments) {
+                    deployments = deployments.sort(function (a, b) {
+                        return a.Id < b.Id ? 1 : (a.Id > b.Id ? -1 : 0);
+                    });
+
+                    var environments = getEnvironments();
+                    self.environment(environments[deployments[0].EnvironmentId.toString()]);
+                });
+            });
+        };
+
+        // synchronously retrieve the list of environments as a dictionary 
+        // (key = environment id, value = environment name)
+        function getEnvironments() {
+            var result;
+
+            $.ajax({
+                async: false,
+                url: '/api/environments',
+                dataType: 'json',
+                success: function (environments) {
+                    result = {};
+                    for (var i = 0; i < environments.length; i++)
+                        result[environments[i].Id.toString()] = environments[i].Name;
+                }
+            });
+
+            return result;
+        }
+
+        ko.applyBindings(new viewModel());
+    </script>
+</body>
+</html>
